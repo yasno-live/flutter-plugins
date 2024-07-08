@@ -127,7 +127,7 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
       let input = engine.inputNode
       let bus = 0
 
-      input.installTap(onBus: bus, bufferSize: 22050, format: inputNode.outputFormat(forBus: bus)) {
+      input.installTap(onBus: bus, bufferSize: 22050, format: input.outputFormat(forBus: bus)) {
         buffer, _ -> Void in
         let samples = buffer.floatChannelData?[0]
         // audio callback, samples in samples[0]...samples[buffer.frameLength-1]
