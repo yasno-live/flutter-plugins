@@ -127,13 +127,7 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
       let input = engine.inputNode
       let bus = 0
 
-      let inputFormat = input.outputFormat(forBus: bus)
-
-      guard let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 1, interleaved: true), let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else{
-          throw AudioConversionError.converterCreationFailed
-      }
-
-      input.installTap(onBus: bus, bufferSize: 22050, format: outputFormat) {
+      input.installTap(onBus: bus, bufferSize: 22050, format: inputNode.outputFormat(forBus: bus)) {
         buffer, _ -> Void in
         let samples = buffer.floatChannelData?[0]
         // audio callback, samples in samples[0]...samples[buffer.frameLength-1]
