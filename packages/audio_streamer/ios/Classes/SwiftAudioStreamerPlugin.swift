@@ -4,11 +4,14 @@ import UIKit
 
 enum AudioConversionError: Error {
   case converterCreationFailed
+  case conversionFailed
 }
 
 public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
 
   private var eventSink: FlutterEventSink?
+  private let conversionQueue = DispatchQueue(label: "conversionQueue")
+    
   var engine = AVAudioEngine()
   var audioData: [Float] = []
   var recording = false
@@ -112,37 +115,58 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
   }
 
   func startRecording(sampleRate: Int?) {
-    engine = AVAudioEngine()
+      engine = AVAudioEngine()
+      let nonNullSampleRate = sampleRate ?? 44100;
+      let bufferSize = nonNullSampleRate * 2
+      
+          do {
+            let inputNode = engine.inputNode
+            let inputFormat = inputNode.outputFormat(forBus: 0)
+              let recordingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(nonNullSampleRate), channels: 1, interleaved: true)
+            guard let formatConverter =  AVAudioConverter(from:inputFormat, to: recordingFormat!) else {
+                throw AudioConversionError.converterCreationFailed
+            }
+              let bus = 0
+              
+              // We install a tap on the audio engine and specifying the buffer size and the input format.
+              engine.inputNode.installTap(onBus: bus, bufferSize: AVAudioFrameCount(bufferSize), format: inputFormat) { (buffer, time) in
 
-    do {
-      try AVAudioSession.sharedInstance().setCategory(
-        AVAudioSession.Category.playAndRecord, options: .mixWithOthers)
-      try AVAudioSession.sharedInstance().setActive(true)
+                self.conversionQueue.async {
 
-      if let sampleRateNotNull = sampleRate {
-        // Try to set sample rate
-        try AVAudioSession.sharedInstance().setPreferredSampleRate(Double(sampleRateNotNull))
-      }
+                  // An AVAudioConverter is used to convert the microphone input to the format required for the model.(pcm 16)
+                  let pcmBuffer = AVAudioPCMBuffer(pcmFormat: recordingFormat!, frameCapacity: AVAudioFrameCount(recordingFormat!.sampleRate * 2.0))
+                  var error: NSError? = nil
 
-      let input = engine.inputNode
-      let bus = 0
-      let format = input.outputFormat(forBus: bus)
-      let bufferSize = format.sampleRate * 2
+                  let inputBlock: AVAudioConverterInputBlock = {inNumPackets, outStatus in
+                    outStatus.pointee = AVAudioConverterInputStatus.haveData
+                    return buffer
+                  }
 
-      input.installTap(onBus: bus, bufferSize: AVAudioFrameCount(bufferSize), format: format) {
-        buffer, _ -> Void in
-        let samples = buffer.floatChannelData?[0]
-        // audio callback, samples in samples[0]...samples[buffer.frameLength-1]
-        let arr = Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength)))
-        self.emitValues(values: arr)
-      }
+                  formatConverter.convert(to: pcmBuffer!, error: &error, withInputFrom: inputBlock)
 
-      try engine.start()
-    } catch {
-      eventSink!(
-        FlutterError(
-          code: "100", message: "Unable to start audio session", details: error.localizedDescription
-        ))
-    }
+                  if error != nil {
+                      print(error!.localizedDescription)
+                  }
+                    
+                  else if let channelData = pcmBuffer!.floatChannelData {
+
+                    let channelDataValue = channelData.pointee
+                    let channelDataValueArray = stride(from: 0,
+                                                       to: Int(pcmBuffer!.frameLength),
+                                                       by: buffer.stride).map{ channelDataValue[$0] }
+
+                    self.emitValues(values: channelDataValueArray)
+                  }
+
+                }
+              }
+
+            try engine.start()
+          } catch {
+            eventSink!(
+              FlutterError(
+                code: "100", message: "Unable to start audio session", details: error.localizedDescription
+              ))
+          }
   }
 }
