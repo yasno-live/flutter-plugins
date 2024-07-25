@@ -120,6 +120,10 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
         let bufferSize = nonNullSampleRate * 2
         
         do {
+            try AVAudioSession.sharedInstance().setCategory(
+              AVAudioSession.Category.playAndRecord, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setActive(true)
+            
             let inputNode = engine.inputNode
             let inputFormat = inputNode.outputFormat(forBus: 0)
             let recordingFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(nonNullSampleRate), channels: 1, interleaved: true)
