@@ -62,7 +62,7 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
       }
       let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
       if options.contains(.shouldResume) {
-        startRecording(sampleRate: preferredSampleRate)
+        startRecording(sampleRate: preferredSampleRate,counter: 0)
       }
 
     default:
@@ -92,9 +92,9 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
     self.eventSink = eventSink
     if let args = arguments as? [String: Any] {
       preferredSampleRate = args["sampleRate"] as? Int
-      startRecording(sampleRate: preferredSampleRate)
+      startRecording(sampleRate: preferredSampleRate,counter: 0)
     } else {
-      startRecording(sampleRate: nil)
+      startRecording(sampleRate: nil,counter: 0)
     }
     return nil
   }
@@ -107,7 +107,7 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
     return nil
   }
 
-  func startRecording(sampleRate: Int?) {
+  func startRecording(sampleRate: Int?,counter: Int) {
     engine = AVAudioEngine()
 
     do {
@@ -131,7 +131,16 @@ public class SwiftAudioStreamerPlugin: NSObject, FlutterPlugin, FlutterStreamHan
         self.emitValues(values: arr)
       }
 
-      try engine.start()
+      do{try engine.start()}catch{
+        if counter != 5{
+          startRecording(sampleRate: nil,counter: counter+1)
+        }else{
+          eventSink!(
+        FlutterError(
+          code: "100", message: "Unable to start audio session", details: error.localizedDescription
+        ))
+        }
+      }
     } catch {
       eventSink!(
         FlutterError(
